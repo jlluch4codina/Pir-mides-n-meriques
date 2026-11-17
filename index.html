@@ -1,0 +1,1029 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Piràmides Numèriques - Joc i Generador de Fitxes</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Canvas Confetti per a la celebració -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- jsPDF i html2canvas per a descàrrega directa de PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Estils per als maons de la piràmide */
+    .brick-shadow {
+      box-shadow: 0 4px 0 rgba(0, 0, 0, 0.08), 0 6px 12px rgba(0, 0, 0, 0.05);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.2s ease, border-color 0.2s ease;
+    }
+    .brick-shadow:focus-within {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 0 rgba(59, 130, 246, 0.25), 0 10px 15px rgba(59, 130, 246, 0.15);
+    }
+
+    /* Treure fletxes dels inputs numèrics */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    input[type=number] {
+      -moz-appearance: textfield;
+    }
+
+    /* Animació de sacsejada per a errors */
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4px); }
+      75% { transform: translateX(4px); }
+    }
+    .animate-shake {
+      animation: shake 0.3s ease-in-out;
+    }
+
+    /* Animació suau d'aparició */
+    @keyframes popIn {
+      0% { transform: scale(0.92); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+    .animate-pop {
+      animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Estils per al full A4 en vista prèvia */
+    .a4-sheet {
+      width: 210mm;
+      min-height: 297mm;
+      background: white;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+      margin: 0 auto;
+      padding: 14mm 16mm;
+      box-sizing: border-box;
+      color: #111827;
+    }
+
+    /* Configuració d'impressió nativa (@media print) */
+    @media print {
+      body {
+        background: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      /* Amaguem tota la interfície web excepte l'àrea d'impressió */
+      #app-container, #toast-container {
+        display: none !important;
+      }
+      #print-modal {
+        position: static !important;
+        display: block !important;
+        background: white !important;
+        padding: 0 !important;
+        overflow: visible !important;
+      }
+      #print-modal-controls {
+        display: none !important;
+      }
+      #print-preview-wrapper {
+        padding: 0 !important;
+        background: white !important;
+        overflow: visible !important;
+        display: block !important;
+      }
+      .a4-sheet {
+        box-shadow: none !important;
+        margin: 0 !important;
+        width: 100% !important;
+        min-height: auto !important;
+        padding: 8mm 10mm !important;
+        page-break-after: always;
+      }
+      .a4-sheet:last-child {
+        page-break-after: auto;
+      }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col selection:bg-indigo-100 selection:text-indigo-900">
+
+  <!-- Contenidor de notificacions Toast (substitueix alert) -->
+  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- INTERFÍCIE PRINCIPAL DE L'APLICACIÓ -->
+  <div id="app-container" class="flex-1 flex flex-col max-w-6xl w-full mx-auto px-4 sm:px-6 py-6">
+    
+    <!-- Capçalera -->
+    <header class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 pb-6 border-b border-slate-200">
+      <div class="flex items-center gap-3">
+        <!-- Icona SVG de Piràmide -->
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow-md shrink-0">
+          <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="3" width="6" height="5" rx="1"/>
+            <rect x="6" y="9.5" width="6" height="5" rx="1"/>
+            <rect x="12" y="9.5" width="6" height="5" rx="1"/>
+            <rect x="3" y="16" width="6" height="5" rx="1"/>
+            <rect x="9" y="16" width="6" height="5" rx="1"/>
+            <rect x="15" y="16" width="6" height="5" rx="1"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">Piràmides Numèriques</h1>
+          <p class="text-sm text-slate-500 font-medium">Càlcul mental, lògica i generador de fitxes imprimibles</p>
+        </div>
+      </div>
+
+      <!-- Botó per obrir el generador de plantilles A4 -->
+      <button id="open-print-modal-btn" class="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm shadow-sm transition active:scale-95 cursor-pointer">
+        <svg class="w-5 h-5 text-indigo-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+        </svg>
+        Generar Fitxa per Imprimir
+      </button>
+    </header>
+
+    <!-- Barra de Configuració del Joc -->
+    <section class="mt-6 bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      
+      <!-- Selector de Dificultat -->
+      <div class="flex flex-col gap-1.5">
+        <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Nivell de dificultat</span>
+        <div class="grid grid-cols-2 sm:flex sm:flex-wrap gap-2" id="difficulty-selector">
+          <button data-level="1" class="diff-btn px-3.5 py-2 rounded-xl text-sm font-semibold border transition cursor-pointer bg-indigo-600 text-white border-indigo-600 shadow-sm">
+            1. Fàcil <span class="opacity-75 text-xs font-normal">(3 files)</span>
+          </button>
+          <button data-level="2" class="diff-btn px-3.5 py-2 rounded-xl text-sm font-semibold border transition cursor-pointer bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">
+            2. Mitjà <span class="opacity-75 text-xs font-normal">(4 files)</span>
+          </button>
+          <button data-level="3" class="diff-btn px-3.5 py-2 rounded-xl text-sm font-semibold border transition cursor-pointer bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">
+            3. Difícil <span class="opacity-75 text-xs font-normal">(5 files)</span>
+          </button>
+          <button data-level="4" class="diff-btn px-3.5 py-2 rounded-xl text-sm font-semibold border transition cursor-pointer bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100">
+            4. Expert <span class="opacity-75 text-xs font-normal">(6 files)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Selector d'Operació i Opcions -->
+      <div class="flex flex-wrap items-end gap-4">
+        <div class="flex flex-col gap-1.5">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Regla de càlcul</span>
+          <div class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-indigo-50/70 border border-indigo-100 text-indigo-900 text-sm font-semibold">
+            <span class="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center text-xs font-bold">+</span>
+            <span>Suma dels 2 de sota</span>
+          </div>
+        </div>
+
+        <!-- Opció de Negatius (només visible/activa en Expert) -->
+        <div id="negatives-wrapper" class="hidden flex-col gap-1.5">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Nombres</span>
+          <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+            <input type="checkbox" id="allow-negatives" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500">
+            <span class="text-sm font-medium text-slate-700">Inclou negatius</span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Àrea Central del Tauler de Joc -->
+    <main class="flex-1 mt-6 bg-white rounded-3xl border border-slate-200/80 shadow-sm p-4 sm:p-8 flex flex-col items-center justify-between relative overflow-hidden">
+      
+      <!-- Banner d'instruccions ràpides i estat -->
+      <div class="w-full flex flex-col sm:flex-row items-center justify-between gap-3 pb-4 border-b border-slate-100">
+        <div class="flex items-center gap-2 text-sm text-slate-600 bg-amber-50 border border-amber-200/70 px-3.5 py-2 rounded-xl">
+          <span class="text-amber-500 text-lg leading-none">💡</span>
+          <span id="rule-hint">Cada maó és la <strong>suma (+)</strong> dels dos maons que té just a sota.</span>
+        </div>
+
+        <div class="flex items-center gap-3 text-sm font-semibold">
+          <span class="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-600" id="progress-badge">
+            Completat: 0 / 0
+          </span>
+        </div>
+      </div>
+
+      <!-- Contenidor de la Piràmide Interactiva -->
+      <div class="my-auto py-8 w-full flex flex-col items-center justify-center overflow-x-auto">
+        <div id="pyramid-board" class="flex flex-col items-center gap-2 sm:gap-2.5 select-none">
+          <!-- Els maons es generen dinàmicament aquí -->
+        </div>
+      </div>
+
+      <!-- Missatge de Feedback / Celebració -->
+      <div id="feedback-banner" class="hidden w-full max-w-lg mb-4 p-4 rounded-2xl text-center font-semibold text-sm sm:text-base transition-all animate-pop"></div>
+
+      <!-- Barra d'Accions del Joc -->
+      <div class="w-full pt-4 border-t border-slate-100 flex flex-wrap items-center justify-center gap-3">
+        <button id="check-btn" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm sm:text-base shadow-sm hover:shadow transition active:scale-95 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+          Comprova
+        </button>
+
+        <button id="hint-btn" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-semibold text-sm transition active:scale-95 cursor-pointer">
+          <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          Pista
+        </button>
+
+        <button id="solve-btn" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-sm transition active:scale-95 cursor-pointer">
+          <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          Mostra solució
+        </button>
+
+        <button id="new-btn" class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm transition active:scale-95 cursor-pointer">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Nova piràmide
+        </button>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL GENERADOR DE FITXES PER IMPRIMIR (FORMAT A4) -->
+  <div id="print-modal" class="fixed inset-0 z-40 hidden bg-slate-900/75 backdrop-blur-sm overflow-y-auto">
+    <div class="min-h-screen flex flex-col">
+      
+      <!-- Barra superior de configuració de la fitxa (s'amaga en imprimir) -->
+      <div id="print-modal-controls" class="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4">
+          <div class="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                🖨️
+              </div>
+              <div>
+                <h2 class="text-lg font-bold text-slate-900">Generador de Fitxes A4</h2>
+                <p class="text-xs text-slate-500">Personalitza la plantilla i imprimeix-la o descarrega-la en PDF</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2.5">
+              <button id="regenerate-sheet-btn" class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-sm transition cursor-pointer">
+                🔄 Nous exercicis
+              </button>
+              <button id="download-pdf-btn" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm shadow-sm transition cursor-pointer">
+                ⬇️ Descarrega PDF
+              </button>
+              <button id="native-print-btn" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm shadow-sm transition cursor-pointer">
+                🖨️ Imprimeix
+              </button>
+              <button id="close-print-modal-btn" class="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer" title="Tanca">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Controls de personalització de la fitxa -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 pt-4">
+            <!-- Títol de la fitxa -->
+            <div class="lg:col-span-2">
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Títol de la fitxa</label>
+              <input type="text" id="sheet-title-input" value="Piràmides Numèriques - Fitxa de Càlcul Mental" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+
+            <!-- Quantitat de piràmides -->
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Piràmides per full</label>
+              <select id="sheet-count-select" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="2">2 piràmides (grans)</option>
+                <option value="4" selected>4 piràmides (estàndard)</option>
+                <option value="6">6 piràmides (compactes)</option>
+              </select>
+            </div>
+
+            <!-- Dificultat de la fitxa -->
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Dificultat</label>
+              <select id="sheet-diff-select" class="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <option value="1">Nivell 1: Fàcil (3 files)</option>
+                <option value="2" selected>Nivell 2: Mitjà (4 files)</option>
+                <option value="3">Nivell 3: Difícil (5 files)</option>
+                <option value="4">Nivell 4: Expert (6 files)</option>
+                <option value="mixed">Barrejat (Nivells 1 a 3)</option>
+              </select>
+            </div>
+
+            <!-- Full de Solucions -->
+            <div class="flex flex-col justify-end">
+              <label class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition">
+                <input type="checkbox" id="include-solutions-checkbox" checked class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500">
+                <span class="text-xs font-semibold text-slate-700">Inclou full de solucions</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Àrea de Vista Prèvia dels Fulls A4 -->
+      <div id="print-preview-wrapper" class="flex-1 py-8 px-4 overflow-x-auto flex flex-col items-center gap-8">
+        <!-- Aquí s'injecten els fulls A4 (Full d'exercicis + Full opcional de solucions) -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /**
+     * LÒGICA PRINCIPAL I ALGORITME DE GENERACIÓ DE PIRÀMIDES NUMÈRIQUES
+     * 
+     * Estructura de dades d'una piràmide de N files:
+     * - Fila 0: Cim de la piràmide (1 element)
+     * - Fila r: té (r + 1) elements
+     * - Fila N-1: Base de la piràmide (N elements)
+     * 
+     * Relació matemàtica:
+     * pyramid[r][c] = op(pyramid[r+1][c], pyramid[r+1][c+1])
+     */
+
+    // Estat global de l'aplicació
+    const state = {
+      level: 1,           // 1: Fàcil (3), 2: Mitjà (4), 3: Difícil (5), 4: Expert (6)
+      allowNegatives: false,
+      currentPuzzle: null,
+      userValues: [],     // Matriu amb els valors introduïts per l'usuari
+      cellStatus: [],     // 'given' | 'empty' | 'correct' | 'wrong' | 'hint'
+      isSolved: false,
+      sheetPuzzles: []    // Piràmides generades per a la fitxa A4
+    };
+
+    // Configuració per nivells (exclusivament sumes)
+    const LEVEL_CONFIG = {
+      1: { rows: 3, label: 'Fàcil',   addMin: 1, addMax: 10 },
+      2: { rows: 4, label: 'Mitjà',   addMin: 1, addMax: 15 },
+      3: { rows: 5, label: 'Difícil', addMin: 2, addMax: 20 },
+      4: { rows: 6, label: 'Expert',  addMin: 3, addMax: 25 }
+    };
+
+    // Utilitat: Nombre enter aleatori entre min i max (inclosos)
+    function randInt(min, max) {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    /**
+     * Genera una piràmide de sumes completa i un conjunt de caselles visibles (mask)
+     * garantint que es pot resoldre pas a pas de manera 100% determinista i única.
+     */
+    function generateUniquePyramid(level, allowNegatives = false) {
+      const cfg = LEVEL_CONFIG[level] || LEVEL_CONFIG[1];
+      const rows = cfg.rows;
+      let solution = [];
+      let visible = [];
+      let attempts = 0;
+
+      while (attempts < 50) {
+        attempts++;
+        solution = Array.from({ length: rows }, (_, r) => Array(r + 1).fill(0));
+
+        // 1. Omplim la base (fila rows - 1) amb nombres adequats al nivell
+        for (let c = 0; c < rows; c++) {
+          let val = randInt(cfg.addMin, cfg.addMax);
+          if (allowNegatives && level === 4 && Math.random() < 0.35) {
+            val = -randInt(1, 12);
+          }
+          solution[rows - 1][c] = val;
+        }
+
+        // 2. Calculem cap amunt sumant els dos blocs inferiors
+        let validNumbers = true;
+        for (let r = rows - 2; r >= 0; r--) {
+          for (let c = 0; c <= r; c++) {
+            const left = solution[r + 1][c];
+            const right = solution[r + 1][c + 1];
+            const val = left + right;
+            solution[r][c] = val;
+
+            // Mantenim valors còmodes per a nivell Mitjà
+            if (level === 2 && val > 85) validNumbers = false;
+          }
+        }
+
+        if (!validNumbers) continue;
+
+        // 3. Creem la màscara de caselles visibles (true = donada, false = buida)
+        visible = Array.from({ length: rows }, (_, r) => Array(r + 1).fill(true));
+        
+        let coords = [];
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c <= r; c++) {
+            coords.push({ r, c });
+          }
+        }
+
+        coords.sort(() => Math.random() - 0.5);
+        if (level === 1) {
+          coords.sort((a, b) => a.r - b.r + (Math.random() * 1.2 - 0.6));
+        }
+
+        const totalCells = (rows * (rows + 1)) / 2;
+        const targetVisible = rows; 
+        let currentVisible = totalCells;
+
+        for (const { r, c } of coords) {
+          if (currentVisible <= targetVisible) break;
+
+          visible[r][c] = false;
+
+          if (isLogicallySolvable(solution, visible)) {
+            currentVisible--;
+          } else {
+            visible[r][c] = true;
+          }
+        }
+
+        break;
+      }
+
+      return {
+        rows,
+        level,
+        solution,
+        visible
+      };
+    }
+
+    /**
+     * Solver lògic iteratiu per a sumes i restes:
+     * Comprova si a partir de les caselles `visible` es poden deduir TOTES les caselles.
+     */
+    function isLogicallySolvable(solution, visible) {
+      const rows = solution.length;
+      const known = visible.map(row => [...row]);
+      let progress = true;
+
+      while (progress) {
+        progress = false;
+        for (let r = 0; r < rows - 1; r++) {
+          for (let c = 0; c <= r; c++) {
+            const topKnown = known[r][c];
+            const leftKnown = known[r + 1][c];
+            const rightKnown = known[r + 1][c + 1];
+
+            // Cas 1: Sabem els dos de baix -> deduïm el de dalt per suma
+            if (!topKnown && leftKnown && rightKnown) {
+              known[r][c] = true;
+              progress = true;
+            }
+            // Cas 2: Sabem el de dalt i el de l'esquerra -> deduïm el de la dreta per resta
+            else if (topKnown && leftKnown && !rightKnown) {
+              known[r + 1][c + 1] = true;
+              progress = true;
+            }
+            // Cas 3: Sabem el de dalt i el de la dreta -> deduïm el de l'esquerra per resta
+            else if (topKnown && !leftKnown && rightKnown) {
+              known[r + 1][c] = true;
+              progress = true;
+            }
+          }
+        }
+      }
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c <= r; c++) {
+          if (!known[r][c]) return false;
+        }
+      }
+      return true;
+    }
+
+    /**
+     * Troba el següent pas lògic deduïble per a la funció "Pista"
+     */
+    function findNextLogicalStep(puzzle, currentKnownMatrix) {
+      const rows = puzzle.rows;
+
+      for (let r = rows - 2; r >= 0; r--) {
+        for (let c = 0; c <= r; c++) {
+          const top = currentKnownMatrix[r][c];
+          const left = currentKnownMatrix[r + 1][c];
+          const right = currentKnownMatrix[r + 1][c + 1];
+
+          if (!top && left && right) {
+            return { r, c, reason: `Suma ${puzzle.solution[r+1][c]} + ${puzzle.solution[r+1][c+1]}` };
+          }
+          if (top && left && !right) {
+            return { r: r + 1, c: c + 1, reason: `Resta ${puzzle.solution[r][c]} - ${puzzle.solution[r+1][c]}` };
+          }
+          if (top && !left && right) {
+            return { r: r + 1, c: c, reason: `Resta ${puzzle.solution[r][c]} - ${puzzle.solution[r+1][c+1]}` };
+          }
+        }
+      }
+
+      for (let r = rows - 1; r >= 0; r--) {
+        for (let c = 0; c <= r; c++) {
+          if (!currentKnownMatrix[r][c]) return { r, c, reason: 'Pista revelada' };
+        }
+      }
+      return null;
+    }
+
+    /**
+     * RENDERITZAT DE LA PIRÀMIDE INTERACTIVA A LA PANTALLA
+     */
+    function startNewGame() {
+      state.isSolved = false;
+      hideFeedback();
+      
+      const puzzle = generateUniquePyramid(state.level, state.allowNegatives);
+      state.currentPuzzle = puzzle;
+
+      // Inicialitzem matrius d'estat de l'usuari
+      state.userValues = Array.from({ length: puzzle.rows }, (_, r) =>
+        Array.from({ length: r + 1 }, (_, c) =>
+          puzzle.visible[r][c] ? String(puzzle.solution[r][c]) : ''
+        )
+      );
+
+      state.cellStatus = Array.from({ length: puzzle.rows }, (_, r) =>
+        Array.from({ length: r + 1 }, (_, c) =>
+          puzzle.visible[r][c] ? 'given' : 'empty'
+        )
+      );
+
+      renderPyramidBoard();
+      updateProgressBadge();
+    }
+
+    function renderPyramidBoard() {
+      const board = document.getElementById('pyramid-board');
+      board.innerHTML = '';
+
+      const { rows, solution, visible } = state.currentPuzzle;
+
+      // Mida adaptativa dels maons segons el nombre de files
+      let sizeClasses = 'w-16 h-12 sm:w-20 sm:h-14 text-lg sm:text-xl';
+      if (rows === 5) sizeClasses = 'w-14 h-11 sm:w-18 sm:h-13 text-base sm:text-lg';
+      if (rows === 6) sizeClasses = 'w-12 h-10 sm:w-16 sm:h-12 text-sm sm:text-base';
+
+      for (let r = 0; r < rows; r++) {
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'flex items-center justify-center gap-1.5 sm:gap-2.5 animate-pop';
+        rowDiv.style.animationDelay = `${r * 35}ms`;
+
+        for (let c = 0; c <= r; c++) {
+          const isGiven = visible[r][c];
+          const status = state.cellStatus[r][c];
+          const val = state.userValues[r][c];
+
+          const brick = document.createElement('div');
+          brick.dataset.r = r;
+          brick.dataset.c = c;
+
+          // Estils visuals segons estat del maó
+          let stateClasses = '';
+          if (isGiven) {
+            stateClasses = 'bg-indigo-50/90 border-2 border-indigo-200 text-indigo-950 font-extrabold';
+          } else if (status === 'correct') {
+            stateClasses = 'bg-emerald-50 border-2 border-emerald-500 text-emerald-800 font-bold';
+          } else if (status === 'wrong') {
+            stateClasses = 'bg-rose-50 border-2 border-rose-500 text-rose-800 font-bold animate-shake';
+          } else if (status === 'hint') {
+            stateClasses = 'bg-amber-50 border-2 border-amber-400 text-amber-900 font-bold';
+          } else {
+            stateClasses = 'bg-white border-2 border-slate-300 hover:border-indigo-400 focus-within:border-indigo-600 text-slate-900 font-bold';
+          }
+
+          brick.className = `${sizeClasses} ${stateClasses} rounded-xl brick-shadow flex items-center justify-center relative overflow-hidden`;
+
+          if (isGiven) {
+            brick.textContent = solution[r][c];
+          } else {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.inputMode = 'numeric';
+            input.value = val;
+            input.setAttribute('aria-label', `Fila ${r + 1}, columna ${c + 1}`);
+            input.className = 'w-full h-full text-center bg-transparent focus:outline-none font-bold';
+            
+            // Esdeveniments d'entrada
+            input.addEventListener('input', (e) => {
+              state.userValues[r][c] = e.target.value;
+              if (state.cellStatus[r][c] === 'wrong' || state.cellStatus[r][c] === 'correct') {
+                state.cellStatus[r][c] = 'empty';
+                brick.className = `${sizeClasses} bg-white border-2 border-slate-300 hover:border-indigo-400 focus-within:border-indigo-600 text-slate-900 font-bold rounded-xl brick-shadow flex items-center justify-center relative overflow-hidden`;
+              }
+              updateProgressBadge();
+            });
+
+            // Permetre comprovar prement Enter
+            input.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') {
+                checkSolution();
+              }
+            });
+
+            brick.appendChild(input);
+          }
+
+          rowDiv.appendChild(brick);
+        }
+        board.appendChild(rowDiv);
+      }
+    }
+
+    function updateProgressBadge() {
+      const { rows } = state.currentPuzzle;
+      let totalEditable = 0;
+      let filledEditable = 0;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c <= r; c++) {
+          if (!state.currentPuzzle.visible[r][c]) {
+            totalEditable++;
+            if (state.userValues[r][c] !== '' && !isNaN(Number(state.userValues[r][c]))) {
+              filledEditable++;
+            }
+          }
+        }
+      }
+
+      document.getElementById('progress-badge').textContent = `Omplert: ${filledEditable} / ${totalEditable}`;
+    }
+
+    /**
+     * COMPROVACIÓ DE RESPOSTES, PISTES I SOLUCIÓ
+     */
+    function checkSolution() {
+      const { rows, solution, visible } = state.currentPuzzle;
+      let allFilled = true;
+      let allCorrect = true;
+      let wrongCount = 0;
+
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c <= r; c++) {
+          if (visible[r][c]) continue;
+
+          const rawVal = state.userValues[r][c].trim();
+          if (rawVal === '') {
+            allFilled = false;
+            allCorrect = false;
+            state.cellStatus[r][c] = 'empty';
+          } else {
+            const numVal = Number(rawVal);
+            if (numVal === solution[r][c]) {
+              state.cellStatus[r][c] = 'correct';
+            } else {
+              state.cellStatus[r][c] = 'wrong';
+              allCorrect = false;
+              wrongCount++;
+            }
+          }
+        }
+      }
+
+      renderPyramidBoard();
+
+      if (allCorrect && allFilled) {
+        state.isSolved = true;
+        showFeedback('🎉 Fantàstic! Has completat tota la piràmide correctament!', 'success');
+        triggerConfetti();
+      } else if (wrongCount > 0) {
+        showFeedback(`Hi ha ${wrongCount} ${wrongCount === 1 ? 'casella incorrecta' : 'caselles incorrectes'} marcades en vermell. Revisa els càlculs!`, 'error');
+      } else {
+        showFeedback('Molt bé! Tots els nombres escrits fins ara són correctes. Continua omplint els buits!', 'info');
+      }
+    }
+
+    function giveHint() {
+      if (state.isSolved) return;
+
+      const { rows, solution } = state.currentPuzzle;
+      // Construïm matriu de caselles que l'usuari ja té correctes o donades
+      const knownMatrix = Array.from({ length: rows }, (_, r) =>
+        Array.from({ length: r + 1 }, (_, c) => {
+          if (state.currentPuzzle.visible[r][c]) return true;
+          const val = state.userValues[r][c].trim();
+          return val !== '' && Number(val) === solution[r][c];
+        })
+      );
+
+      const step = findNextLogicalStep(state.currentPuzzle, knownMatrix);
+      if (!step) {
+        showToast('Ja tens tota la piràmide resolta!');
+        return;
+      }
+
+      state.userValues[step.r][step.c] = String(solution[step.r][step.c]);
+      state.cellStatus[step.r][step.c] = 'hint';
+      renderPyramidBoard();
+      updateProgressBadge();
+      showToast(`💡 Pista aplicat: ${step.reason}`);
+    }
+
+    function revealSolution() {
+      const { rows, solution, visible } = state.currentPuzzle;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c <= r; c++) {
+          if (!visible[r][c]) {
+            state.userValues[r][c] = String(solution[r][c]);
+            state.cellStatus[r][c] = 'correct';
+          }
+        }
+      }
+      state.isSolved = true;
+      renderPyramidBoard();
+      updateProgressBadge();
+      showFeedback('Solució completa mostrada. Prem «Nova piràmide» per practicar-ne una altra!', 'info');
+    }
+
+    function showFeedback(msg, type) {
+      const banner = document.getElementById('feedback-banner');
+      banner.classList.remove('hidden', 'bg-emerald-100', 'text-emerald-900', 'bg-rose-100', 'text-rose-900', 'bg-indigo-100', 'text-indigo-900');
+      
+      if (type === 'success') {
+        banner.classList.add('bg-emerald-100', 'text-emerald-900');
+      } else if (type === 'error') {
+        banner.classList.add('bg-rose-100', 'text-rose-900');
+      } else {
+        banner.classList.add('bg-indigo-100', 'text-indigo-900');
+      }
+      banner.textContent = msg;
+    }
+
+    function hideFeedback() {
+      document.getElementById('feedback-banner').classList.add('hidden');
+    }
+
+    function showToast(message) {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'bg-slate-900 text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg animate-pop pointer-events-auto flex items-center justify-between gap-2';
+      toast.textContent = message;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => toast.remove(), 300);
+      }, 3200);
+    }
+
+    function triggerConfetti() {
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 85,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      }
+    }
+
+    /**
+     * GENERADOR DE FITXES IMPRIMIBLES (A4) I EXPORTACIÓ PDF
+     */
+    function generateWorksheetData() {
+      const count = Number(document.getElementById('sheet-count-select').value);
+      const diffSetting = document.getElementById('sheet-diff-select').value;
+
+      const puzzles = [];
+      for (let i = 0; i < count; i++) {
+        let lvl = Number(diffSetting);
+        if (diffSetting === 'mixed') {
+          // Distribuïm nivells 1, 2 i 3 equitativament
+          lvl = (i % 3) + 1;
+        }
+        puzzles.push(generateUniquePyramid(lvl, false));
+      }
+      state.sheetPuzzles = puzzles;
+      renderWorksheetPreview();
+    }
+
+    function renderWorksheetPreview() {
+      const wrapper = document.getElementById('print-preview-wrapper');
+      wrapper.innerHTML = '';
+
+      const title = document.getElementById('sheet-title-input').value.trim() || 'Piràmides Numèriques';
+      const count = state.sheetPuzzles.length;
+      const includeSolutions = document.getElementById('include-solutions-checkbox').checked;
+
+      // Full 1: Exercicis per a l'alumne
+      const exerciseSheet = buildA4PageHTML(title, state.sheetPuzzles, false, count);
+      wrapper.appendChild(exerciseSheet);
+
+      // Full 2 (opcional): Full de solucions per al docent
+      if (includeSolutions) {
+        const solutionSheet = buildA4PageHTML(`${title} — SOLUCIONS`, state.sheetPuzzles, true, count);
+        wrapper.appendChild(solutionSheet);
+      }
+    }
+
+    function buildA4PageHTML(sheetTitle, puzzles, isSolutionSheet, count) {
+      const page = document.createElement('div');
+      page.className = 'a4-sheet flex flex-col justify-between';
+
+      const opInstruction = 'Completa cada piràmide sabent que cada maó és la <strong>suma (+)</strong> dels dos maons que té just a sota.';
+
+      // Capçalera de la fitxa A4
+      let headerHTML = `
+        <div>
+          <div class="flex items-start justify-between border-b-2 border-slate-800 pb-3 mb-3">
+            <div>
+              <h1 class="text-xl font-extrabold text-slate-900 tracking-tight">${escapeHTML(sheetTitle)}</h1>
+              <p class="text-xs text-slate-600 mt-1">${opInstruction}</p>
+            </div>
+            <div class="text-right text-xs font-bold text-slate-500 uppercase tracking-wider border border-slate-300 px-2.5 py-1 rounded">
+              ${isSolutionSheet ? 'Full de respostes' : 'Càlcul mental: Sumes (+)'}
+            </div>
+          </div>
+      `;
+
+      if (!isSolutionSheet) {
+        headerHTML += `
+          <div class="grid grid-cols-3 gap-4 text-sm font-medium text-slate-800 mb-5 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+            <div class="col-span-2 flex items-end gap-2">
+              <span class="font-bold">Nom i cognoms:</span>
+              <span class="flex-1 border-b border-slate-400 mb-0.5"></span>
+            </div>
+            <div class="flex items-end gap-2">
+              <span class="font-bold">Data:</span>
+              <span class="flex-1 border-b border-slate-400 mb-0.5"></span>
+            </div>
+          </div>
+        `;
+      }
+      headerHTML += `</div>`;
+
+      // Graella de piràmides dins el full A4
+      const gridColsClass = count === 2 ? 'grid-cols-1 gap-8' : 'grid-cols-2 gap-x-6 gap-y-6';
+      let gridHTML = `<div class="grid ${gridColsClass} my-auto py-2">`;
+
+      puzzles.forEach((p, idx) => {
+        const lvlName = LEVEL_CONFIG[p.level]?.label || '';
+        gridHTML += `
+          <div class="border border-slate-300 rounded-xl p-3.5 flex flex-col items-center justify-between bg-white">
+            <div class="w-full flex items-center justify-between text-xs font-bold text-slate-500 mb-3 border-b border-slate-100 pb-1.5">
+              <span>Exercici ${idx + 1}</span>
+              <span class="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700">Nivell ${p.level} (${lvlName})</span>
+            </div>
+            <div class="flex flex-col items-center gap-1 my-auto py-1">
+              ${renderStaticPyramidBricks(p, isSolutionSheet, count)}
+            </div>
+          </div>
+        `;
+      });
+
+      gridHTML += `</div>`;
+
+      // Peu de pàgina del full A4
+      const footerHTML = `
+        <div class="pt-3 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-400">
+          <span>Piràmides Numèriques — Material educatiu de càlcul mental</span>
+          <span>Pàgina ${isSolutionSheet ? '2 (Solucions)' : '1'}</span>
+        </div>
+      `;
+
+      page.innerHTML = headerHTML + gridHTML + footerHTML;
+      return page;
+    }
+
+    function renderStaticPyramidBricks(puzzle, showAll, countOnSheet) {
+      const { rows, solution, visible } = puzzle;
+
+      // Ajustem la mida dels maons perquè càpiguen perfectament al full A4
+      let brickDim = 'w-12 h-8 text-sm';
+      if (countOnSheet === 2) {
+        brickDim = rows >= 5 ? 'w-14 h-9 text-base' : 'w-16 h-10 text-lg';
+      } else if (countOnSheet === 6) {
+        brickDim = rows >= 5 ? 'w-9 h-6 text-xs' : 'w-11 h-7 text-xs';
+      } else {
+        // 4 piràmides
+        if (rows === 5) brickDim = 'w-10 h-7 text-xs';
+        if (rows === 6) brickDim = 'w-8 h-6 text-[11px]';
+      }
+
+      let html = '';
+      for (let r = 0; r < rows; r++) {
+        html += `<div class="flex items-center justify-center gap-1">`;
+        for (let c = 0; c <= r; c++) {
+          const isGiven = visible[r][c];
+          const val = solution[r][c];
+
+          if (isGiven) {
+            html += `<div class="${brickDim} border-[1.5px] border-slate-800 bg-slate-100 rounded flex items-center justify-center font-extrabold text-slate-900">${val}</div>`;
+          } else if (showAll) {
+            html += `<div class="${brickDim} border-[1.5px] border-slate-400 bg-white rounded flex items-center justify-center font-semibold text-indigo-700">${val}</div>`;
+          } else {
+            html += `<div class="${brickDim} border-[1.5px] border-slate-700 bg-white rounded flex items-center justify-center"></div>`;
+          }
+        }
+        html += `</div>`;
+      }
+      return html;
+    }
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    /**
+     * DESCÀRREGA DIRECTA DEL PDF AMB jsPDF + html2canvas
+     */
+    async function downloadWorksheetPDF() {
+      const btn = document.getElementById('download-pdf-btn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Generant PDF...';
+
+      try {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({
+          orientation: 'portrait',
+          unit: 'mm',
+          format: 'a4'
+        });
+
+        const sheets = document.querySelectorAll('#print-preview-wrapper .a4-sheet');
+        for (let i = 0; i < sheets.length; i++) {
+          const canvas = await html2canvas(sheets[i], {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: '#ffffff'
+          });
+          const imgData = canvas.toDataURL('image/png');
+          if (i > 0) pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, 0, 210, 297);
+        }
+
+        pdf.save('piramides-numeriques-fitxa.pdf');
+        showToast('✅ Fitxa PDF descarregada correctament!');
+      } catch (err) {
+        console.error(err);
+        showToast('⚠️ Error en generar el PDF. Pots fer servir el botó «Imprimeix».');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
+    /**
+     * INICIALITZACIÓ D'ESDEVENIMENTS DE LA INTERFÍCIE
+     */
+    document.addEventListener('DOMContentLoaded', () => {
+      // Botons de nivell de dificultat
+      document.querySelectorAll('.diff-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.diff-btn').forEach(b => {
+            b.className = 'diff-btn px-3.5 py-2 rounded-xl text-sm font-semibold border transition cursor-pointer bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100';
+          });
+          btn.className = 'diff-btn px-3.5 py-2 rounded-xl text-sm font-semibold border transition cursor-pointer bg-indigo-600 text-white border-indigo-600 shadow-sm';
+          
+          state.level = Number(btn.dataset.level);
+          const negWrapper = document.getElementById('negatives-wrapper');
+          if (state.level === 4) {
+            negWrapper.classList.remove('hidden');
+            negWrapper.classList.add('flex');
+          } else {
+            negWrapper.classList.add('hidden');
+            negWrapper.classList.remove('flex');
+          }
+          startNewGame();
+        });
+      });
+
+      // Checkbox de negatius
+      document.getElementById('allow-negatives').addEventListener('change', (e) => {
+        state.allowNegatives = e.target.checked;
+        startNewGame();
+      });
+
+      // Botons d'acció del tauler
+      document.getElementById('check-btn').addEventListener('click', checkSolution);
+      document.getElementById('hint-btn').addEventListener('click', giveHint);
+      document.getElementById('solve-btn').addEventListener('click', revealSolution);
+      document.getElementById('new-btn').addEventListener('click', startNewGame);
+
+      // Controls del Modal d'Impressió A4
+      const printModal = document.getElementById('print-modal');
+      document.getElementById('open-print-modal-btn').addEventListener('click', () => {
+        // Sincronitzem dificultat actual per comoditat
+        document.getElementById('sheet-diff-select').value = String(state.level);
+        generateWorksheetData();
+        printModal.classList.remove('hidden');
+      });
+
+      document.getElementById('close-print-modal-btn').addEventListener('click', () => {
+        printModal.classList.add('hidden');
+      });
+
+      document.getElementById('regenerate-sheet-btn').addEventListener('click', generateWorksheetData);
+      document.getElementById('sheet-count-select').addEventListener('change', generateWorksheetData);
+      document.getElementById('sheet-diff-select').addEventListener('change', generateWorksheetData);
+      document.getElementById('sheet-title-input').addEventListener('input', renderWorksheetPreview);
+      document.getElementById('include-solutions-checkbox').addEventListener('change', renderWorksheetPreview);
+
+      document.getElementById('native-print-btn').addEventListener('click', () => {
+        window.print();
+      });
+
+      document.getElementById('download-pdf-btn').addEventListener('click', downloadWorksheetPDF);
+
+      // Iniciem la primera partida
+      startNewGame();
+    });
+  </script>
+</body>
+</html>
